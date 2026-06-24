@@ -1,3 +1,5 @@
+'''This is my take on a Reliable UDP implementation in Python.'''
+
 import threading
 from threading import Lock
 
