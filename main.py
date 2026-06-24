@@ -245,7 +245,7 @@ class ReliableUDPSender:
                             missing_packet.time()
                             self.Network.send(missing_packet)
             
-    def pack(self, data) -> list[Packet]: # Split data into chunks & pack them.
+    def pack(self, data) -> list[Packet]:
         chunks : list = []
         packets : list[Packet] = []
 
