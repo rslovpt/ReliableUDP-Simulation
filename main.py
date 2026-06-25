@@ -137,7 +137,7 @@ class ReliableUDPReceiver:
     def NES_ACK(self): 
         '''Next Expected Sequence ACK SWP (Sliding Window Protocol)\n
         This method is used to acknowledge the next expected sequence number.
-        If packet is out-of-order, it will notify the sender of the missing sequence.
+        If packet is out-of-order, it will notify the sender of the missing sequence, and once packet is received, current sequence will proceed.
         This will continue until all packets are received in order.
 
         This method is more complex, and is what I invented as a hybrid between ONE-BIT and SEL_REP SWP styles.
