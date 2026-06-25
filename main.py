@@ -17,10 +17,10 @@ class Packet: # Packet Object
 
         self.ownership = 'SENDER'
 
-    def time(self):
+    def time_start(self):
         self.timer = time.time()
     
-class FinishedData:
+class FinishedData: # Finished Data Object (Template for final received data)
     def __init__(self, data, packets_made : int):
         self.data = data
         self.packets_made : int = packets_made
@@ -78,6 +78,7 @@ class ReliableUDPReceiver:
     def __init__(self, Network: NetworkSimulation, tick_time: float = 0.1, CHUNK_SIZE : int = 32):
         '''Initialize the ReliableUDPReceiver with a network simulation. Optional parameters include tick time and chunk size.'''
         self.CHUNK_SIZE : int = CHUNK_SIZE
+        self.CURRENT_METHOD : str = 'NES_ACK' 
 
         self.UNORGANIZED_RECEIVED : list[Packet] = []
         self.RECEIVING_BUFFER : dict[int, Packet] = {}
@@ -103,9 +104,8 @@ class ReliableUDPReceiver:
             if len(self.RECEIVING_BUFFER) == self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total:
                 self.AWAITING_COLLECT_BUFFER.append(FinishedData(data, packets_made=len(self.RECEIVING_BUFFER)))
             else:
-                #print("Error: Incomplete data received.")
                 while len(self.RECEIVING_BUFFER) < self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total:
-                    self.NES_ACK() # Replace in future for variable SWP
+                    getattr(self, self.CURRENT_METHOD)
 
             self.RECEIVING_BUFFER.clear()
 
@@ -124,15 +124,29 @@ class ReliableUDPReceiver:
         return expected_seq
 
     def SEL_REP_ACK(self): 
-        '''SEL_REP (Selective Repeat) ACK SWP (Sliding Window Protocol)\n
-        This method is used to acknowledge the next expected sequence number.
-        Initial packet stream is acknowledged at the end, if any are missing, the sender will retransmit only the missing packets.
+        '''Selective Repeat ACK SWP (Sliding Window Protocol)\n
+        This method will send a ACK to each packet received.
+        If sender does not receive all the ACK's after timer passed, it will retransmit missing packets.
 
         This method is the most efficient and widely used in practice.
 
-        Currently not implemented lmao.
+        This is sender dependent. Sender is responsible for retransmitting missing packets. ACK is sent every time a packet is received.
         '''
-        pass
+        self.ON_GOING = True
+
+        if self.UNORGANIZED_RECEIVED:
+            packet = self.UNORGANIZED_RECEIVED.pop(0)
+            self.RECEIVING_BUFFER[packet.sequence] = packet
+
+            if len(self.RECEIVING_BUFFER) == packet.total:
+                self.ON_GOING = False
+            
+            PacketACK = Packet('ACK', packet.sequence, packet.total)
+            PacketACK.ownership = 'RECEIVER'
+            self.Network.send(PacketACK)
+        
+        if not self.ON_GOING:
+            self.finalize()
 
     def NES_ACK(self): 
         '''Next Expected Sequence ACK SWP (Sliding Window Protocol)\n
@@ -141,6 +155,8 @@ class ReliableUDPReceiver:
         This will continue until all packets are received in order.
 
         This method is more complex, and is what I invented as a hybrid between ONE-BIT and SEL_REP SWP styles.
+        
+        This is receiver dependent. It opts in for the least amount of ACKs needed to be reliable.
         '''
         self.ON_GOING = True
 
@@ -158,17 +174,13 @@ class ReliableUDPReceiver:
                     else:
                         check = False
                     
-            elif self.CURRENT_SEQUENCE-1 == packet.total:
-                #print(self.CURRENT_SEQUENCE, packet.total)
-                
+            elif self.CURRENT_SEQUENCE-1 == packet.total:                
                 FinishACK = Packet('ACK', self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].sequence, self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total)
                 FinishACK.ownership = 'RECEIVER'
                 self.Network.send(FinishACK)
 
                 self.ON_GOING = False
             else:
-                #print("out of order", self.CURRENT_SEQUENCE-1, packet.sequence, packet.total)
-
                 OutOfOrderACK = Packet('ACK', packet.sequence, packet.total)
                 OutOfOrderACK.ownership = 'RECEIVER'
                 self.Network.send(OutOfOrderACK)
@@ -177,8 +189,7 @@ class ReliableUDPReceiver:
         if self.ON_GOING:
             if self.RECEIVING_BUFFER:
                 if time.time() - self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].timer > self.RESEND_TIMER:
-
-                    TimerACK = Packet('ACK', self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].sequence, self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total)
+                    TimerACK = Packet('ACK', self.find_missing_seq(self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total), self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total)
                     TimerACK.ownership = 'RECEIVER'
                     self.Network.send(TimerACK)
                 
@@ -188,9 +199,6 @@ class ReliableUDPReceiver:
                     FinishACK = Packet('ACK', self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].sequence, self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total)
                     FinishACK.ownership = 'RECEIVER'
                     self.Network.send(FinishACK)
-                
-                else:
-                    pass
             
         else:
             self.finalize()
@@ -203,13 +211,19 @@ class ReliableUDPReceiver:
                 
                 if data and data.ownership != 'RECEIVER':
                     self.UNORGANIZED_RECEIVED.append(data)
-                    self.NES_ACK()
-    
+                    getattr(self, self.CURRENT_METHOD)()
+
     def receive(self):
         with self.Lock:
             if self.AWAITING_COLLECT_BUFFER:
                 return self.AWAITING_COLLECT_BUFFER.pop(0)
             return None
+        
+    def Set_ACK_Mode(self, ACK_Mode : int):
+        if ACK_Mode == 0:
+            self.CURRENT_METHOD = 'NES_ACK'
+        elif ACK_Mode == 1:
+            self.CURRENT_METHOD = 'SEL_REP_ACK'
 
     def run(self):
         '''Start the RUDPReceiver threads. (Which include simply receiving)'''
@@ -219,6 +233,8 @@ class ReliableUDPSender:
     def __init__(self, Network: NetworkSimulation, tick_time: float = 0.1, CHUNK_SIZE : int = 32):
         '''Initialize the ReliableUDPSender with a network simulation. Optional parameters include tick time and chunk size.'''
         self.CHUNK_SIZE : int = CHUNK_SIZE
+        self.CURRENT_METHOD : str = ''
+        self.SENDER_DEPENDENT = False
 
         self.SENDING_BUFFER : list[Packet] = []
         self.IN_TRANSIT : dict[int, Packet] = {}
@@ -227,9 +243,24 @@ class ReliableUDPSender:
         self.Lock = Lock()
 
         self.tick_time = tick_time
+        self.RESEND_TIMER = 0.5
     
     def finalize(self):
         self.IN_TRANSIT.clear()
+
+    def ACK_HANDLE(self, data : Packet):
+        if self.CURRENT_METHOD == 'NES_ACK':
+            if data.sequence == data.total:
+                self.finalize()
+            else: 
+                if self.IN_TRANSIT:
+                    missing_packet = self.IN_TRANSIT[list(self.IN_TRANSIT.keys())[-1]]
+                    missing_packet.time_start()
+                    self.Network.send(missing_packet)
+        elif self.CURRENT_METHOD == 'SEL_REP_ACK':
+            if self.IN_TRANSIT:
+                if data.sequence-1 in self.IN_TRANSIT:
+                    del self.IN_TRANSIT[data.sequence-1]
 
     def receive_thread(self):
         while True:
@@ -238,13 +269,15 @@ class ReliableUDPSender:
             
             if data and data.ownership != 'SENDER':
                 if data.data == 'ACK':
-                    if data.sequence == data.total:
-                        self.finalize()
-                    else: 
-                        if self.IN_TRANSIT:
-                            missing_packet = self.IN_TRANSIT[list(self.IN_TRANSIT.keys())[-1]]
-                            missing_packet.time()
-                            self.Network.send(missing_packet)
+                    self.ACK_HANDLE(data)
+            
+            if self.SENDER_DEPENDENT and self.IN_TRANSIT:
+                if time.time() - self.IN_TRANSIT[list(self.IN_TRANSIT.keys())[0]].timer > self.RESEND_TIMER:
+                    for _, re_packet in self.IN_TRANSIT.items():
+                        re_packet : Packet
+
+                        re_packet.time_start()
+                        self.Network.send(re_packet)
             
     def pack(self, data) -> list[Packet]:
         chunks : list = []
@@ -271,17 +304,26 @@ class ReliableUDPSender:
                 for i, data in enumerate(list(self.SENDING_BUFFER)):
 
                     for packet in self.pack(data):
-                        packet.time()
+                        packet.time_start()
 
                         self.Network.send(packet)
                         self.IN_TRANSIT[packet.sequence] = packet
                     
                     if i == len(self.SENDING_BUFFER) - 1:
                         del self.SENDING_BUFFER[i]
-
+                
     def send(self, data):
         with self.Lock:
             self.SENDING_BUFFER.append(data)
+
+    def Set_ACK_Mode(self, ACK_Mode : int):
+        self.SENDER_DEPENDENT = False
+
+        if ACK_Mode == 0:
+            self.CURRENT_METHOD = 'NES_ACK'
+        elif ACK_Mode == 1:
+            self.CURRENT_METHOD = 'SEL_REP_ACK'
+            self.SENDER_DEPENDENT = True
 
     def run(self):
         '''Start the RUDPSender threads. (Which include sending and receiving)'''
@@ -298,6 +340,10 @@ def run():
 
     RUDP_Receiver.run()
     RUDP_Sender.run()
+
+    mode = 0 # 0 = NES_ACK, 1 = SEL_REP_ACK
+    RUDP_Receiver.Set_ACK_Mode(mode) 
+    RUDP_Sender.Set_ACK_Mode(mode)
 
     while running:
         time.sleep(0.1)
