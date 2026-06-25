@@ -123,13 +123,12 @@ class ReliableUDPReceiver:
 
         return expected_seq
 
-    def ONEBIT_ACK(self): 
-        '''One-Bit ACK SWP (Sliding Window Protocol)\n
+    def SEL_REP_ACK(self): 
+        '''SEL_REP (Selective Repeat) ACK SWP (Sliding Window Protocol)\n
         This method is used to acknowledge the next expected sequence number.
-        If packet is missing, it will notify the sender of the missing sequence.
-        Received packet are not in order, and processed directly into the receiving buffer.
+        Initial packet stream is acknowledged at the end, if any are missing, the sender will retransmit only the missing packets.
 
-        This method is the slowest, but most direct and simple.
+        This method is the most efficient and widely used in practice.
 
         Currently not implemented lmao.
         '''
@@ -141,7 +140,7 @@ class ReliableUDPReceiver:
         If packet is out-of-order, it will notify the sender of the missing sequence.
         This will continue until all packets are received in order.
 
-        This method is the most efficient and widely used in practice.
+        This method is more complex, and is what I invented as a hybrid between ONE-BIT and SEL_REP SWP styles.
         '''
         self.ON_GOING = True
 
