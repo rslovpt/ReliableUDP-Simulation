@@ -2,7 +2,7 @@
 
 2. Receiving thread catches packet one by one, placing it in received buffer, awaiting for current sequence and total packets to match up.
     2.5. NES_ACK ONLY: In case of missing packet, current sequence will not move forward until packet is received. 
-    2.5. SEL_REP_ACK ONLY: In case of missing packet, current sequence will finish, but any missing packet from the buffer will requested, one by one, until buffer is filled.
+    2.5. SEL_REP_ACK ONLY: In case of missing packet, current sequence will finish, but any missing packet from the buffer will be retransmitted.
 
     2.6 To all: In case a packet never arrives, there are timers, in which when hit a certain limit, will send to sender a request to resend packet.
 
