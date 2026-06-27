@@ -181,6 +181,7 @@ class ReliableUDPReceiver:
 
                 self.ON_GOING = False
             else:
+
                 OutOfOrderACK = Packet('ACK', packet.sequence, packet.total)
                 OutOfOrderACK.ownership = 'RECEIVER'
                 self.Network.send(OutOfOrderACK)
@@ -192,14 +193,6 @@ class ReliableUDPReceiver:
                     TimerACK = Packet('ACK', self.find_missing_seq(self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total), self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total)
                     TimerACK.ownership = 'RECEIVER'
                     self.Network.send(TimerACK)
-                
-                if self.CURRENT_SEQUENCE == self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total:
-                    self.ON_GOING = False
-
-                    FinishACK = Packet('ACK', self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].sequence, self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].total)
-                    FinishACK.ownership = 'RECEIVER'
-                    self.Network.send(FinishACK)
-            
         else:
             self.finalize()
         
