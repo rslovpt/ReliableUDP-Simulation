@@ -10,4 +10,4 @@
 
 4. Call receive function through receiver class to collect latest data from the awaiting collection buffer.
 
-Note: This is how I think it goes and how I based of the program to work by. This can easily be adapted to another form and can even be used outside.
+Note: This is how I think it goes and how I based of the program to work by. This can easily be adapted to another form and can even be used in real-world applications.
