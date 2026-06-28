@@ -81,14 +81,13 @@ class ReliableUDPReceiver:
         self.CHUNK_SIZE : int = CHUNK_SIZE
         self.CURRENT_METHOD : str = 'NES_ACK' 
 
-        self.UNORGANIZED_RECEIVED : list[Packet] = []
+        self.UNORGANIZED_RECEIVED : deque[Packet] = deque()
         self.RECEIVING_BUFFER : dict[int, Packet] = {}
 
         self.ON_GOING = False
         self.CURRENT_SEQUENCE = 1
 
-        self.SENDING_BUFFER : list[Packet] = []
-        self.AWAITING_COLLECT_BUFFER : list[FinishedData] = []
+        self.AWAITING_COLLECT_BUFFER : deque[FinishedData] = deque()
         
         self.Network = Network        
         self.Lock = Lock()
@@ -110,7 +109,7 @@ class ReliableUDPReceiver:
 
             self.RECEIVING_BUFFER.clear()
 
-        self.SENDING_BUFFER.clear()
+        self.UNORGANIZED_RECEIVED.clear()
         self.CURRENT_SEQUENCE = 1
 
     def find_missing_seq(self, total : int):
@@ -136,7 +135,7 @@ class ReliableUDPReceiver:
         self.ON_GOING = True
 
         if self.UNORGANIZED_RECEIVED:
-            packet = self.UNORGANIZED_RECEIVED.pop(0)
+            packet = self.UNORGANIZED_RECEIVED.popleft()
             self.RECEIVING_BUFFER[packet.sequence] = packet
 
             if len(self.RECEIVING_BUFFER) == packet.total:
@@ -162,7 +161,7 @@ class ReliableUDPReceiver:
         self.ON_GOING = True
 
         if self.UNORGANIZED_RECEIVED:
-            packet = self.UNORGANIZED_RECEIVED.pop(0)
+            packet = self.UNORGANIZED_RECEIVED.popleft()
             self.RECEIVING_BUFFER[packet.sequence] = packet
 
             if packet.sequence == self.CURRENT_SEQUENCE:
@@ -187,7 +186,6 @@ class ReliableUDPReceiver:
                 OutOfOrderACK.ownership = 'RECEIVER'
                 self.Network.send(OutOfOrderACK)
             
-            
         if self.ON_GOING:
             if self.RECEIVING_BUFFER:
                 if time.time() - self.RECEIVING_BUFFER[list(self.RECEIVING_BUFFER.keys())[-1]].timer > self.RESEND_TIMER:
@@ -210,7 +208,7 @@ class ReliableUDPReceiver:
     def receive(self):
         with self.Lock:
             if self.AWAITING_COLLECT_BUFFER:
-                return self.AWAITING_COLLECT_BUFFER.pop(0)
+                return self.AWAITING_COLLECT_BUFFER.popleft()
             return None
         
     def Set_ACK_Mode(self, ACK_Mode : int):
@@ -327,7 +325,7 @@ class ReliableUDPSender:
 def run():
     running = True
 
-    Network = NetworkSimulation()
+    Network = NetworkSimulation(12,12)
     
     RUDP_Sender = ReliableUDPSender(Network, tick_time=0.005, CHUNK_SIZE=32) # For the person reading, this is a small chunk size for testing packets made. (Standard is 1024)
     RUDP_Receiver = ReliableUDPReceiver(Network, tick_time=0.005, CHUNK_SIZE=32)
