@@ -8,6 +8,7 @@ from collections import deque
 import random
 import time
 import json
+from os import system
 
 class Packet: # Packet Object
     def __init__(self, data, sequence, total):
@@ -338,6 +339,8 @@ def run():
     RUDP_Receiver.Set_ACK_Mode(mode) 
     RUDP_Sender.Set_ACK_Mode(mode)
 
+    count = 0 # for testing purposes
+
     while running:
         time.sleep(0.1)
 
@@ -347,7 +350,12 @@ def run():
 
         received_data = RUDP_Receiver.receive()
         if received_data:
-            print(f"Received: {received_data.data} | Packets made: {received_data.packets_made}")
+            def terminal():
+                nonlocal count
+                count += 1
+                system("clear")
+                print(f"Received: {received_data.data} {count}x | Packets made: {received_data.packets_made}")
+            terminal()
 
 if __name__ == '__main__':
     run()
